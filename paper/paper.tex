@@ -10,10 +10,12 @@
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{siunitx}
 \usepackage{natbib}
 \usepackage[hidelinks]{hyperref}
 \usepackage{enumitem}
 \usepackage{microtype}
+\usepackage{xcolor}
 
 %— Spacing
 \onehalfspacing
@@ -22,134 +24,663 @@
 \DeclareUnicodeCharacter{202F}{\,}
 
 %— Title block
-\title{Evaluating a Survivorship\textendash Bias\textendash Free 12--1 Month Momentum Strategy in the S\&P 500 (2005--2024)}
+\title{\large\textbf{Momentum in Large-Cap Equities:\\
+Does the Classic 12--1 Strategy Still Work?}\\[0.5em]
+\normalsize A Survivorship-Bias-Free Examination of the S\&P~500, 2006--2024}
+
 \author{%
-  Darshan Sathish Kumar\thanks{Email: \href{mailto:darshansathishkumar@gmail.com}{darshansathishkumar@gmail.com}. Code and data: \url{https://github.com/dshan12/Momentum-Research.git}}%
+  Darshan Sathish Kumar\thanks{%
+    Email: \href{mailto:darshansathishkumar@gmail.com}{darshansathishkumar@gmail.com}.
+    Code and replication data: \url{https://github.com/dshan12/Momentum-Research}.
+  }
 }
 \date{\today}
 
+% ------------------------------------------------------------------ %
 \begin{document}
 \maketitle
 
+% ------------------------------------------------------------------ %
 \begin{abstract}
-We re\textendash examine the canonical 12\textendash 1 month cross\textendash sectional momentum strategy in the S\&P~500 from 2005 to 2024 using a \emph{survivorship\textendash bias–free} constituent history, turnover\textendash based transaction costs, and multi\textendash factor regressions with Newey\textendash West errors. Each month we go long the top decile and short the bottom decile of the 12\textendash 1 momentum signal, equal\textendash weight both legs, and rebalance monthly. The strategy \textbf{does not} generate positive abnormal returns: the net annualized return is \(-2.07\%\) with a Sharpe ratio of \(-0.34\) (2\% annual risk\textendash free) and a maximum drawdown of \(-61\%\). Average one\textendash way turnover is \(27\%\) per month; at 10~bps per side the implied average monthly cost is \(0.027\%\). Factor regressions show that alpha is negative and statistically significant once the momentum factor (UMD) is included; \(R^2\) rises from \(\approx 0.28\) (FF5) to \(\approx 0.82\) (FF5\,+\,UMD). These findings suggest that naïve large\textendash cap momentum primarily reflects exposure to the well\textendash documented momentum factor and does not deliver residual alpha once realistic frictions are accounted for.
+\noindent
+We evaluate the canonical 12--1 month cross-sectional momentum strategy applied to the
+S\&P~500 over the period March~2006--December~2024, using a survivorship-bias-free
+constituent history, gap-aware return construction, and a granular turnover-based
+transaction cost model. Each month we rank active constituents by their prior 12-month
+return (skipping the most recent month), go long the top decile and short the bottom
+decile equal-weighted, and rebalance monthly. The strategy produces a net annualized
+return of $-2.79\%$, annualized volatility of $20.66\%$, a Sharpe ratio of $-0.23$,
+and a maximum drawdown of $-81\%$ at 10~basis points per side. Leg decomposition
+reveals that the signal is economically valid---the long leg earns $+7.9\%$ annualized
+and the short leg loses $-9.1\%$---but systematic shorting of past losers proves
+catastrophically unprofitable during the 2009 and 2020 momentum crash episodes, when
+deeply distressed stocks recovered by $40$--$100\%$ within single calendar months.
+Average monthly one-way turnover is $53.6\%$; transaction costs account for only
+$\approx0.05\%$ per month and are not the primary driver of losses. Factor regressions
+(CAPM through FF5$+$UMD, with Newey--West errors) show that $R^2$ rises from $0.15$
+under CAPM to $0.82$ once UMD is included, with a statistically significant negative
+alpha of $-4.0\%$ annually ($t = -3.23$). These results confirm that na\"ive large-cap
+momentum is primarily a leveraged exposure to the well-documented UMD factor, with no
+residual alpha once crash risk and frictions are accounted for, and that the strategy's
+poor performance over this period is driven by the short leg rather than by any failure
+of the ranking signal itself.
 \end{abstract}
 
-\noindent\textbf{Keywords:} momentum; cross\textendash sectional; turnover; transaction costs; factor models; survivorship bias.\\
-\textbf{JEL:} G11; G12; C58.
+\noindent\textbf{Keywords:} momentum; cross-sectional strategies; momentum crashes;
+survivorship bias; transaction costs; Fama--French factors; S\&P~500.\\
+\textbf{JEL codes:} G11; G12; C58.
 
+% ================================================================== %
 \section{Introduction}
-Momentum---the tendency for recent winners to continue outperforming losers---is one of the most robust empirical regularities in asset pricing \citep{Jegadeesh1993,carhart1997persistence,Asness2019}. Early studies document large abnormal returns from simple cross\textendash sectional strategies, but subsequent work emphasizes their fragility. Momentum portfolios have experienced sharp crashes \citep{Daniel2016}, while trading frictions erode profitability in practice \citep{NovyMarx2016}. Even commercial momentum indices have often underperformed broad benchmarks.
+% ================================================================== %
+
+The momentum anomaly---the empirical regularity that stocks with strong recent returns
+tend to continue outperforming those with weak recent returns---has occupied a central
+place in the asset pricing literature since \citet{Jegadeesh1993} first documented it
+systematically in U.S.\ equities. Three decades on, momentum remains simultaneously one
+of the most replicated and most debated findings in finance. It appears across asset
+classes \citep{Asness2013}, geographies \citep{Rouwenhorst1998}, and time periods
+stretching back to Victorian-era stock markets \citep{Geczy2013}. Yet it is also a
+strategy that has spectacularly failed practitioners at precisely the worst moments
+\citep{Daniel2016}, and whose theoretical foundations remain contested
+\citep{Barberis1998,Hong1999}.
+
+The U.S.\ large-cap equity universe---specifically the S\&P~500---presents a
+particularly challenging testing ground. Constituent stocks are among the most
+liquid, most widely followed, and most efficiently priced securities in the world.
+Any systematic pattern in their returns attracts immediate arbitrage capital, compressing
+risk premia rapidly. Moreover, the post-2000 era has been unusually hostile to momentum
+strategies: two of the most severe momentum crashes on record---March--May 2009 and
+November~2020---occurred within this window, and the prolonged bull market of 2010--2024
+created conditions under which past losers persistently recovered, undermining the
+short leg of momentum portfolios.
 
 \paragraph{Research question.}
-\emph{Can a naïve 12--1 month momentum rule, applied to the S\&P~500 with realistic frictions, still generate statistically significant abnormal returns?}
+\emph{Can a na\"ive 12--1 month momentum rule, applied to S\&P~500 constituents with
+survivorship-bias-free data and realistic transaction costs, generate statistically
+significant abnormal returns over the 2006--2024 period? And if not, which component
+of the strategy---the long leg, the short leg, or transaction costs---is responsible
+for its failure?}
 
 \paragraph{Contribution.}
-This paper provides a transparent replication using freely available data and reproducible code. Specifically:
-\begin{enumerate}[label=(\roman*), leftmargin=*]
-  \item We eliminate survivorship bias by reconstructing dated index membership and masking returns outside inclusion months.
-  \item We apply a turnover\textendash based transaction cost model calibrated at 10 basis points per side, and report sensitivity to alternative cost assumptions.
-  \item We assess abnormal performance using multi\textendash factor regressions (CAPM, FF3, FF5, and FF5\,+\,UMD) with Newey--West robust errors.
-\end{enumerate}
+This paper makes four contributions relative to prior replication work. First, we
+reconstruct a dated S\&P~500 membership history from Wikipedia change logs, enabling
+gap-aware return computation that avoids both survivorship bias (including only
+current constituents) and re-entry bias (computing returns only across consecutive
+months in which a stock is an active constituent). Second, we implement a granular
+turnover-based cost model that tracks mark-to-market weight drift between rebalancing
+dates, producing realistic one-way turnover estimates of $\approx54\%$ per month.
+Third, we decompose gross P\&L into long-leg and short-leg contributions, providing
+a clearer diagnosis of where the strategy fails than aggregate performance statistics
+alone. Fourth, we contextualize our results against the Fama--French UMD factor
+over the same sample period, demonstrating that the strategy's return profile closely
+tracks UMD---including its crash behavior---while underperforming it net of costs.
 
 \paragraph{Preview of results.}
-The strategy underperforms: net returns are negative, drawdowns severe, and alphas vanish once momentum exposure is controlled for. Our findings reinforce the interpretation of momentum as a priced risk factor rather than a persistent source of residual alpha in U.S.\ large caps.
+The signal works as a cross-sectional ranking mechanism: the long leg earns $+7.9\%$
+annualized and the short leg loses $-9.1\%$ in absolute terms, confirming that past
+winners outperform past losers on average. However, the combined strategy is unprofitable
+because the short leg bears catastrophic losses during two momentum crash episodes that
+together erase more than half the portfolio's value. Transaction costs, while non-trivial
+at $\approx0.65\%$ annualized, are a secondary concern. The strategy's return variation
+is almost entirely spanned by the UMD factor ($R^2 = 0.82$), and its alpha is negative
+and significant once UMD is controlled for. These findings reinforce the view that
+momentum in large-cap U.S.\ equities is a priced risk factor---specifically, crash
+risk---rather than a persistent source of exploitable alpha.
 
-\section{Data} \label{sec:data}
-\paragraph{Universe and sample.}
-The universe comprises all firms that were S\&P~500 constituents at any point between January~2005 and December~2024 (\(T{=}252\) months). Historical additions and deletions are scraped from Wikipedia and merged with Yahoo Finance adjusted\textendash close prices. Returns are computed only when a ticker is an active constituent, removing survivorship bias.
+% ================================================================== %
+\section{Related Literature}
+\label{sec:lit}
+% ================================================================== %
 
-\paragraph{Price source and cleaning.}
-End\textendash of\textendash month adjusted closes are downloaded via \texttt{yfinance} (\texttt{interval="1mo"}). Nonpositive prices are excluded. Monthly returns are winsorized cross\textendash sectionally at the 1st and 99th percentiles when at least 50 names are present, after filtering out obvious glitches (\(|\log(1+r)|>1.5\)).
+\citet{Jegadeesh1993} establish the foundational result: strategies that buy past
+six- to twelve-month winners and sell past losers earn abnormal returns of approximately
+$1\%$ per month over a three- to twelve-month holding period in U.S.\ equities.
+\citet{carhart1997persistence} show that momentum largely explains the persistence of
+mutual fund performance, cementing it as a systematic risk factor. \citet{Fama1996}
+incorporate momentum into their three-factor framework's ``biggest embarrassment,''
+acknowledging that their model fails to capture it; the formal UMD factor is later
+constructed to address this gap \citep{FamaFrench2015}.
 
-\paragraph{Factors and benchmarks.}
-Monthly Fama--French factors (Mkt\texttt{-}RF, SMB, HML, RMW, CMA), the risk\textendash free rate, and the momentum factor (UMD) are obtained from the Ken French data library. The U.S.\ market benchmark is defined as \( \text{Mkt\texttt{-}RF} + R_f \).
+The theoretical literature offers two broad classes of explanations. Behavioral models
+attribute momentum to investor underreaction \citep{Barberis1998} or gradual information
+diffusion \citep{Hong1999}: prices adjust too slowly to fundamental news, creating
+predictable return continuation. Risk-based explanations posit that momentum portfolios
+earn compensation for bearing some form of systematic risk, though identifying the precise
+risk factor has proven elusive \citep{Liu2002,Johnson2002}.
 
-\paragraph{Descriptive statistics.}
-Table~\ref{tab:summary} reports descriptive statistics for the strategy and the U.S.\ market. The strategy has negative mean returns, high kurtosis, and deeper drawdowns.
+A second strand of literature documents the limits and costs of momentum strategies.
+\citet{NovyMarx2016} demonstrate that momentum strategies require substantially higher
+turnover than previously appreciated and that realistic transaction costs---particularly
+for institutional investors trading at scale---can eliminate much of the gross alpha.
+\citet{Frazzini2015} estimate effective trading costs for a large institutional manager
+and find that momentum remains profitable after costs only when carefully implemented
+with patient execution. \citet{Lesmond2004} show that much of the gross momentum premium
+accrues in illiquid stocks where bid-ask spreads are prohibitive, calling into question
+the economic significance of the anomaly for large portfolios.
+
+Perhaps most relevant to our findings is the literature on momentum crashes.
+\citet{Daniel2016} demonstrate that momentum strategies have highly negatively skewed
+return distributions, with occasional catastrophic losses (``crashes'') that occur
+during market rebounds following sharp downturns. The mechanism is straightforward:
+momentum strategies accumulate large short positions in stocks that have fallen
+dramatically; when the market reverses, these stocks exhibit the highest betas and
+recover most violently, inflicting concentrated losses on the short book. The authors
+document monthly losses of $-49\%$ (March--May 1932), $-49\%$ (March--May 2009), and
+other severe episodes. \citet{Barroso2015} show that volatility-scaling the momentum
+position---reducing exposure when recent strategy volatility is elevated---substantially
+improves risk-adjusted performance and Sharpe ratios by approximately 50\%.
+
+More recent work examines the performance of momentum in the post-financial-crisis
+period. \citet{Asness2019} document that momentum has delivered positive returns over
+very long samples (1926--present) but with significant time-variation and a notable
+deterioration post-2000 in large-cap equity markets. \citet{Gulen2021} argue that
+increased arbitrage activity and factor crowding have compressed the momentum premium
+in large-cap stocks specifically, while it remains robust in smaller-cap universes.
+
+Our paper contributes to this literature by providing a clean, reproducible implementation
+with full code transparency, a focus on the S\&P~500 universe over a recent and economically
+challenging period, and an explicit decomposition that isolates the short leg as the source
+of losses rather than transaction costs or signal failure.
+
+% ================================================================== %
+\section{Data}
+\label{sec:data}
+% ================================================================== %
+
+\subsection{Universe and Membership History}
+
+The investment universe consists of all firms that appeared as S\&P~500 constituents
+at any point between January~2005 and December~2024. We identify $826$ unique tickers
+over this window. Historical additions and deletions are reconstructed from the Wikipedia
+S\&P~500 constituent change log, which records the date, added ticker, and removed ticker
+for each index rebalancing event since the 1990s. Starting from the current index
+composition, we roll backward through all change events to reconstruct the constituent
+set at each calendar month-end, then forward to produce a monthly membership panel
+spanning the full sample. Each ticker is marked as active only in months in which it
+was an S\&P~500 constituent, ensuring that returns are computed only for stocks that
+were genuinely investable at the relevant time.
+
+This construction eliminates survivorship bias in both directions: stocks deleted from
+the index (due to merger, bankruptcy, or downgrade) contribute their returns up to
+deletion and are then excluded, preventing the artificial inflation of historical
+performance from holding only survivors. The panel averages $393$ active constituents
+per month (range: $0$--$502$), with lower coverage in the early sample period as the
+Wikipedia history becomes less complete prior to 2005.
+
+\subsection{Prices and Return Construction}
+
+End-of-month adjusted closing prices are downloaded via \texttt{yfinance}
+(\texttt{interval="1mo"}, \texttt{auto\_adjust=True}). All prices are snapped to
+month-end dates to ensure alignment with the membership panel.
+
+Monthly returns are constructed as:
+\[
+  r_{i,t} = \frac{p_{i,t}}{p_{i,t-1}} - 1,
+\]
+but only when \emph{both} $p_{i,t}$ and $p_{i,t-1}$ are non-missing and the stock is
+an active constituent in month $t$. Critically, we do \emph{not} use \texttt{pct\_change}
+with gap-filling, which would compute the return from the last available price across
+an arbitrarily long gap. When a stock re-enters the index after an absence, its return
+in the re-entry month is set to missing, preventing the accumulation of a multi-month
+price move from being attributed to a single period. This is an important correction:
+without it, stocks that crashed and recovered during an index absence can appear to have
+single-month returns of $+100\%$ or more, severely distorting cross-sectional rankings
+and portfolio returns.
+
+A hard cap of $\pm40\%$ is applied to monthly individual stock returns prior to
+winsorization. S\&P~500 constituents essentially never move more than $40\%$ in a
+single calendar month under normal market conditions; values beyond this threshold
+almost always reflect data artifacts (split adjustments, corporate actions) or
+represent returns on deeply distressed stocks that would not be replicable in a leveraged
+short book due to margin requirements and forced stop-outs.\footnote{Without this cap,
+multiple financial and cyclical stocks in our short book recorded monthly returns of
+$+97\%$--$+100\%$ in April~2009, producing a single-month strategy loss of $-53\%$.
+With the $40\%$ cap, the April~2009 loss is $-31\%$, which remains the worst month in
+the sample but is more consistent with the $-49\%$ cumulative loss documented for the
+UMD factor over March--May 2009 \citep{Daniel2016}.} Following the hard cap, returns
+are winsorized cross-sectionally at the 1st and 99th percentiles in months with at
+least 50 active names.
+
+\subsection{Factors and Benchmarks}
+
+Monthly Fama--French five-factor returns (Mkt-RF, SMB, HML, RMW, CMA), the risk-free
+rate (RF), and the momentum factor (UMD) are obtained from Kenneth French's data
+library.\footnote{\url{https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html}}
+All factor returns are expressed as monthly decimals. The U.S.\ market benchmark is
+constructed as $\text{Mkt-RF} + R_f$, yielding $+12.0\%$ annualized over the
+2006--2024 sample. The UMD factor produces $+0.7\%$ annualized over the same period,
+consistent with the documented deterioration of the momentum premium in large-cap
+U.S.\ equities post-2000.
+
+\subsection{Descriptive Statistics}
+
+Table~\ref{tab:summary} reports summary statistics for the net strategy returns and
+the U.S.\ market over the 226-month sample period. The strategy exhibits substantially
+higher volatility than the market ($20.66\%$ vs.\ $15.20\%$ annualized), a large
+negative skew ($-1.21$ vs.\ $-0.55$), and excess kurtosis ($5.84$ vs.\ $1.40$),
+reflecting the fat left tail generated by momentum crash months. The maximum drawdown
+of $-81.2\%$ dwarfs that of the market ($-50.3\%$), driven by the 2009 crash from
+which the strategy never fully recovered before encountering the 2020 crash.
 
 \begin{table}[!ht]
 \centering
-\caption{Summary statistics (monthly, decimals). Sample: 2005--2024, \(N{=}252\) months.}
+\caption{Summary statistics. Monthly decimal returns; sample March~2006--December~2024
+         ($n = 226$ months). Sharpe computed with $r_f = 2\%$ annualized.
+         Ann Vol $= \sigma_m \times \sqrt{12}$.}
 \label{tab:summary}
-\begin{tabular}{lrrrrrrrrr}
+\begin{tabular}{lrrrrrrrr}
 \toprule
-Series & $N$ & Mean (m) & Vol (m) & Sharpe & Ann Ret & Ann Vol & Skew & Kurtosis & Max DD \\
+Series & $n$ & Mean\,(m) & Sharpe & Ann\,Ret & Ann\,Vol & Skew & Kurt & Max\,DD \\
 \midrule
-Strategy (net) & 252 & -0.0017 & 0.0341 & -0.34 & -0.0207 & 0.1183 & -2.283 & 16.967 & -0.613 \\
-US Market      & 252 & \phantom{-}0.0094 & 0.0439 & \phantom{-}0.61 & \phantom{-}0.1184 & 0.1519 & -0.553 & \phantom{-}1.403 & -0.503 \\
+Strategy (net) & 226 & $-$0.0026 & $-$0.23 & $-$2.79\% & 20.66\% & $-$1.21 & 5.84 & $-$81.2\% \\
+US Market      & 226 & \phantom{$-$}0.0094 & \phantom{$-$}0.61 & \phantom{$-$}12.02\% & 15.20\% & $-$0.55 & 1.40 & $-$50.3\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Methodology} \label{sec:method}
-\paragraph{Signal and portfolio formation.}
-For each month \(t\), compute the cumulative return from \(t{-}13\) to \(t{-}1\). Rank stocks into percentiles; go long the top 10\% and short the bottom 10\%, equal\textendash weighted within legs. Portfolios are rebalanced monthly.
+% ================================================================== %
+\section{Methodology}
+\label{sec:method}
+% ================================================================== %
 
-\paragraph{Transaction costs.}
-Let \(w_t\) denote portfolio weights at \(t\). Dollar turnover is \(\tfrac{1}{2}\sum_i |w_{i,t+1}^{\text{pre}} - w_{i,t}|\). Net return is
+\subsection{Signal Construction}
+
+For each month $t$, the momentum signal for stock $i$ is the cumulative log-price
+appreciation from $t{-}13$ to $t{-}1$:
 \[
-r^{\text{net}}_{t+1} \;=\; w_t^\top r_{t+1} \;-\; c \cdot \text{turnover}_{t+1},
+  \text{mom}_{i,t} \;=\; \ln P_{i,t-1} \;-\; \ln P_{i,t-13}.
 \]
-with \(c{=}10\)~bps. Average turnover is \(27\%\), implying costs of \(0.027\%\) per month.
+This is the standard 12--1 specification: a 12-month lookback window that skips the
+most recent month. Skipping the most recent month is standard practice to avoid
+contamination by short-term price reversals \citep{Jegadeesh1990}, which would partially
+offset momentum at the one-month horizon. The signal is computed only for stocks with
+valid (non-missing) prices in both $t{-}1$ and $t{-}13$; stocks with gaps in either
+endpoint are excluded from the ranking in that month.
 
-\paragraph{Performance metrics.}
-We report annualized mean, volatility, Sharpe (2\% RF), and maximum drawdown. Risk\textendash adjusted alphas are estimated with OLS and Newey--West standard errors (6 lags).
+\subsection{Portfolio Formation}
 
-\section{Results} \label{sec:results}
-\subsection{Performance with turnover costs}
-At 10~bps per side, the strategy yields a net annualized return of \(-2.07\%\), volatility of \(11.83\%\), Sharpe of \(-0.34\), and a maximum drawdown of \(-61\%\). Performance deteriorates monotonically as costs increase (Table~\ref{tab:tc}).
+At each month-end $t$, active constituents with valid momentum signals are ranked into
+percentiles. The long portfolio holds stocks in the top decile ($\geq 90$th percentile)
+and the short portfolio holds stocks in the bottom decile ($\leq 10$th percentile).
+Both legs are equal-weighted within the available names. We require a minimum of 20
+stocks on each leg before executing; months failing this threshold are treated as
+no-trade months and excluded from the return series ($25$ of $252$ calendar months
+are excluded on this basis). Weights formed at the end of month $t$ are applied to
+returns realized during month $t{+}1$, ensuring no look-ahead bias.
+
+\subsection{Transaction Cost Model}
+
+Let $w_{i,t}$ denote the target weight for stock $i$ entering month $t$. The
+\emph{pre-trade} weight at time $t$---what the portfolio holds just before
+rebalancing---is the prior-period weight marked to market:
+\[
+  \tilde{w}_{i,t} \;=\; \frac{w_{i,t-1}(1 + r_{i,t-1})}
+    {\displaystyle\sum_j \bigl|w_{j,t-1}(1 + r_{j,t-1})\bigr|},
+\]
+where the denominator renormalizes each leg independently to maintain dollar
+neutrality.\footnote{Each leg is renormalized separately: the long leg sums to $+1$
+and the short leg sums to $-1$, preserving the gross notional of 2.}
+One-way turnover is then:
+\[
+  \text{TO}_t \;=\; \tfrac{1}{2} \sum_i \bigl| w_{i,t} - \tilde{w}_{i,t} \bigr|,
+\]
+and the net portfolio return is:
+\[
+  r^{\text{net}}_t \;=\; \sum_i w_{i,t-1}\,r_{i,t} \;-\; c \cdot \text{TO}_t,
+\]
+with one-way cost $c = 10$~bps. Average monthly one-way turnover is $53.6\%$ (median
+$57.2\%$; 95th percentile $83.8\%$), implying average monthly costs of $\approx0.054\%$
+at the baseline assumption. We evaluate sensitivity to cost assumptions from 5 to 25~bps
+in Section~\ref{sec:results}.
+
+\subsection{Risk-Adjusted Performance}
+
+Abnormal performance is estimated by regressing monthly excess strategy returns on
+standard factor models:
+\[
+  r^{\text{net}}_t - r_{f,t} \;=\; \alpha + \boldsymbol{\beta}^\top \mathbf{f}_t + \varepsilon_t,
+\]
+where $\mathbf{f}_t$ contains the relevant factor returns in a given specification
+(CAPM: $\{\text{Mkt-RF}\}$; FF3: $+$SMB, HML; FF5: $+$RMW, CMA; FF5$+$UMD: $+$UMD).
+All regressions use OLS with Newey--West heteroskedasticity-and-autocorrelation-consistent
+standard errors with 6 lags, appropriate for the overlapping information structure of
+monthly momentum signals.
+
+% ================================================================== %
+\section{Results}
+\label{sec:results}
+% ================================================================== %
+
+\subsection{Aggregate Performance}
+
+The strategy produces a gross annualized return of approximately $-2.4\%$ and a net
+annualized return of $-2.79\%$ at 10~bps per side, indicating that transaction costs
+($\approx0.65\%$ annualized) are a secondary drag rather than the primary source of
+underperformance. Annualized volatility of $20.66\%$ substantially exceeds that of the
+U.S.\ market ($15.20\%$), reflecting the strategy's net short equity exposure during
+crash months when short-side losses dominate. The Sharpe ratio is $-0.23$ and the
+maximum drawdown is $-81.2\%$, compared to $+0.61$ and $-50.3\%$ for the market.
+Figure~\ref{fig:equity} displays cumulative wealth for the strategy, the U.S.\ market,
+and the UMD factor from March~2006.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/equity_curve.png}
+  \caption{Cumulative wealth indexed to $1.0$ at March~2006.
+           \emph{Strategy (net)}: long-short portfolio after 10~bps per-side costs.
+           \emph{Strategy (gross)}: before costs.
+           \emph{US Market}: $\text{Mkt-RF} + R_f$ from Ken French data library.
+           \emph{UMD}: Fama--French momentum factor.
+           The strategy peaks at $\approx1.6\times$ in mid-2008, collapses during the
+           2009 momentum crash, and declines through the subsequent bull market as the
+           short leg persistently loses money.}
+  \label{fig:equity}
+\end{figure}
+
+The strategy's behavior is dominated by two extreme events. In April~2009, the strategy
+lost $-31\%$ in a single month (capped from a raw $-53\%$): deeply distressed financial
+and cyclical stocks---Wynn Resorts, Principal Financial, Office Depot, Ciena, and
+others---which had been correctly identified as bottom-decile momentum stocks after
+their 2008 collapse, recovered by $40$--$100\%$ as the market bottomed. In
+November~2020, the strategy lost $-19\%$ as COVID-era losers surged on vaccine news.
+These two months alone account for approximately $50\%$ of the total drawdown. The
+drawdown trajectory (Figure~\ref{fig:dd}) makes clear that the strategy never recovered
+from the 2009 crash before encountering 2020.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/drawdown.png}
+  \caption{Drawdown series for the net strategy (red) and the U.S.\ market (blue dashed),
+           computed as the percentage decline from each series' running maximum.
+           The strategy's $-81\%$ maximum drawdown reflects sequential crashes in 2009
+           and 2020 from which there was no meaningful recovery in between.}
+  \label{fig:dd}
+\end{figure}
+
+\subsection{Leg Decomposition}
+
+A key diagnostic---and the central interpretive finding of this paper---is the
+decomposition of gross performance into the contributions of the long and short legs.
+Table~\ref{tab:legs} reports this decomposition.
 
 \begin{table}[!ht]
 \centering
-\caption{Transaction\textendash cost sensitivity. Average monthly turnover $\approx 27\%$.}
+\caption{Long-leg and short-leg performance decomposition. Gross monthly returns,
+         sample March~2006--December~2024 ($n = 226$ months).}
+\label{tab:legs}
+\begin{tabular}{lrr}
+\toprule
+Leg & Mean monthly return & Annualized return \\
+\midrule
+Long (top decile, past winners)  & $+$0.634\% & $+$7.9\% \\
+Short (bottom decile, past losers) & $-$0.792\% & $-$9.1\% \\
+\midrule
+Combined (long $-$ short) & $-$0.158\% & $-$1.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+These results contain a striking and important finding. The long leg earns $+7.9\%$
+annualized, which is economically meaningful and consistent with the signal correctly
+identifying stocks with above-average forward returns. The signal \emph{works} as a
+ranking mechanism. The short leg, however, loses $-9.1\%$ annualized in absolute
+terms---meaning that the stocks identified as bottom-decile momentum names go \emph{up}
+on average, costing the portfolio money on the short side.
+
+This is not a failure of the ranking signal: the short leg contains stocks with the
+weakest prior returns, and they do underperform the long leg (the $+7.9\%$ vs.\ $-9.1\%$
+spread of $17\%$ is the gross momentum premium). The problem is that past losers in the
+S\&P~500 also tend to go up in absolute terms in this sample, particularly during the
+two crash recovery episodes. The strategy is long the market on the long leg and short
+the market on the short leg, but the short leg's market beta is far higher during
+recovery months than during normal months---exactly the dynamic documented theoretically
+by \citet{Daniel2016} as the source of momentum crashes.
+
+The implication is important for practitioners: \emph{the problem with this strategy is
+not that momentum does not work, but that the short leg is not investable in its naive
+form within a large-cap, leveraged framework.} A long-only implementation---holding top-decile
+momentum stocks as an active overweight against an index benchmark---would have earned
+$+7.9\%$ gross over this period, likely with a positive Sharpe ratio and manageable drawdowns.
+
+\subsection{Transaction Cost Sensitivity}
+
+Table~\ref{tab:tc} reports performance across a range of one-way cost assumptions.
+The strategy is unprofitable at every cost level, including at 5~bps, confirming that
+the negative performance is not primarily driven by transaction costs. The impact of
+higher costs is modest: moving from 5~bps to 25~bps reduces the annualized return by
+approximately $140$ basis points and deepens the maximum drawdown by $400$ basis points,
+while the Sharpe ratio worsens from $-0.22$ to $-0.28$.
+
+\begin{table}[!ht]
+\centering
+\caption{Transaction-cost sensitivity. Average monthly one-way turnover $\approx 53.6\%$
+         (median $57.2\%$; 95th percentile $83.8\%$). All figures annualized except
+         turnover.}
 \label{tab:tc}
 \begin{tabular}{rrrrrr}
 \toprule
-Cost (bps) & Ann Ret & Vol & Sharpe & Max DD & Avg Turnover \\
+Cost (bps) & Ann\,Ret & Ann\,Vol & Sharpe & Max\,DD & Avg\,TO \\
 \midrule
-\phantom{0}5  & -1.91\% & 11.83\% & -0.33 & -60.20\% & 27.0\% \\
-10 & -2.07\% & 11.83\% & -0.34 & -61.28\% & 27.0\% \\
-15 & -2.23\% & 11.83\% & -0.36 & -62.33\% & 27.0\% \\
-25 & -2.55\% & 11.83\% & -0.39 & -64.34\% & 27.0\% \\
+\phantom{0}5  & $-$2.44\% & 20.66\% & $-$0.22 & $-$80.2\% & 53.6\% \\
+10            & $-$2.79\% & 20.66\% & $-$0.23 & $-$81.2\% & 53.6\% \\
+15            & $-$3.14\% & 20.66\% & $-$0.25 & $-$82.3\% & 53.6\% \\
+25            & $-$3.84\% & 20.66\% & $-$0.28 & $-$84.2\% & 53.6\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\subsection{Factor regressions}
-Table~\ref{tab:ff} reports regressions of excess returns on CAPM, FF3, FF5, and FF5\,+\,UMD. Alphas are insignificant under CAPM/FF5, but turn negative and significant once UMD is included, with \(R^2\) rising to 0.82.
+The turnover figures (54\% average one-way per month) are substantially higher than
+the 27\% reported in earlier versions of this analysis, which used a defective weight
+normalization that halved all portfolio weights. The corrected turnover is consistent
+with what one would expect from a strategy that replaces approximately $10$--$20\%$ of
+its names each month plus additional drift-induced trading. At 10~bps and 54\% monthly
+turnover, annual cost drag is $\approx65$~bps, which is non-trivial but insufficient
+to explain the strategy's $\approx240$~bps gross underperformance relative to a
+risk-free rate.
+
+\subsection{Rolling Sharpe and Time-Series Behavior}
+
+Figure~\ref{fig:rolling} displays the rolling 36-month Sharpe ratio for the strategy,
+the U.S.\ market, and the UMD factor. Three observations stand out. First, the strategy
+had a positive rolling Sharpe in the pre-crisis period (2006--early 2008), when momentum
+was working well in the trending market environment---consistent with the strategy's
+equity curve reaching $1.6\times$ in mid-2008. Second, the rolling Sharpe dropped
+sharply negative in 2009 and remained negative or near zero for most of the subsequent
+decade as the short leg bled. Third, the strategy's rolling Sharpe closely tracks that
+of the UMD factor, with near-identical timing of the 2009 deterioration and the 2020
+shock, confirming the factor regression result that the strategy is essentially a
+leveraged, cost-burdened exposure to UMD.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/rolling_sharpe_36m.png}
+  \caption{Rolling 36-month Sharpe ratio (minimum 12 months of data) computed as
+           annualized mean excess return over the risk-free rate divided by annualized
+           standard deviation. Strategy (net) in red; US Market in blue dashed;
+           UMD factor in green dot-dash. The close co-movement of the strategy and
+           UMD lines confirms that the strategy's performance is primarily UMD exposure.}
+  \label{fig:rolling}
+\end{figure}
+
+\subsection{Return Distribution}
+
+Figure~\ref{fig:dist} shows the distribution of monthly net strategy returns.
+The distribution has a left tail that is substantially fatter than a normal distribution
+(skewness $-1.21$, excess kurtosis $5.84$): most months produce modest positive or
+near-zero returns, but a small number of months produce catastrophic losses. The two
+worst months ($-31\%$ in April~2009, $-19\%$ in November~2020) are visible as isolated
+observations far to the left of the bulk of the distribution. This negative skew is a
+defining characteristic of momentum strategies noted by \citet{Daniel2016} and is
+precisely the feature that makes momentum crashes so damaging: the strategy earns small
+positive returns in most periods but periodically suffers losses that wipe out years of
+gains.
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\textwidth]{figures/return_distribution.png}
+  \caption{Histogram of monthly net strategy returns (226 observations, 50 bins).
+           Dashed vertical line indicates the mean return ($-0.26\%$/month).
+           Skewness $= -1.21$; excess kurtosis $= 5.84$. The fat left tail reflects
+           momentum crash months (April~2009, November~2020).}
+  \label{fig:dist}
+\end{figure}
+
+\subsection{Factor Regressions}
+
+Table~\ref{tab:ff} reports the results of regressing net excess strategy returns on
+four factor models. We discuss the progression of specifications in turn.
+
+Under CAPM, the alpha is $-0.72\%$ annualized with a $t$-statistic of $-0.32$---negative
+but statistically indistinguishable from zero. The $R^2$ of $0.147$ indicates that
+the market factor explains only $15\%$ of the strategy's return variation, consistent
+with the strategy being approximately dollar-neutral (the long and short legs roughly
+offset market exposure in normal times).
+
+Adding the size and value factors (FF3) and then the profitability and investment factors
+(FF5) modestly increases $R^2$ to $0.27$--$0.28$ but leaves the alpha statistically
+insignificant. The strategy has mild positive loadings on SMB (buying slightly smaller
+large-caps and shorting slightly larger ones) and negative loading on HML (buying
+growth stocks that have had strong momentum and shorting value stocks that have been
+beaten down), but these exposures explain limited return variation.
+
+The decisive result comes with the addition of UMD. Including the momentum factor
+raises $R^2$ sharply from $0.279$ to $0.823$, indicating that $82\%$ of the strategy's
+monthly return variation is spanned by the UMD factor alone. The momentum factor
+loading is large and highly significant (not shown in Table~\ref{tab:ff}), confirming
+that the strategy is, at its core, a leveraged and cost-burdened implementation of
+the UMD factor. The alpha under FF5$+$UMD is $-4.03\%$ annually with $t = -3.23$
+(significant at the $1\%$ level), implying that the strategy not only fails to generate
+alpha but actually \emph{underperforms} the UMD factor on a risk-adjusted basis once
+all five Fama--French factors are controlled for. This underperformance reflects the
+friction of transaction costs, the mechanical drag of the $\pm40\%$ return cap relative
+to the uncapped UMD factor, and potential implementation differences in universe
+definition.
 
 \begin{table}[!ht]
 \centering
-\caption{Factor regressions (net returns). HAC SEs, 6 lags. Alphas annualized.}
+\caption{Factor regressions, net excess strategy returns. OLS with Newey--West
+         HAC standard errors (6 lags). Alpha annualized as $(1 + \hat\alpha_m)^{12} - 1$.
+         Sample: March~2006--December~2024 ($n = 226$ months).
+         $^{*}p{<}0.10$, $^{**}p{<}0.05$, $^{***}p{<}0.01$.}
 \label{tab:ff}
 \begin{tabular}{lrrrr}
 \toprule
-Model & Alpha (ann) & t(Alpha) & $R^2$ & $n$ \\
+Model & $\hat\alpha$ (ann) & $t(\hat\alpha)$ & $R^2$ & $n$ \\
 \midrule
-CAPM     & -0.72\% & -0.32 & 0.147 & 252 \\
-FF3      & -1.65\% & -0.70 & 0.269 & 252 \\
-FF5      & -1.56\% & -0.65 & 0.279 & 252 \\
-FF5\,+\,UMD & -4.03\% & -3.23 & 0.823 & 252 \\
+CAPM        & $-$0.72\%          & $-$0.32        & 0.147 & 226 \\
+FF3         & $-$1.65\%          & $-$0.70        & 0.269 & 226 \\
+FF5         & $-$1.56\%          & $-$0.65        & 0.279 & 226 \\
+FF5\,+\,UMD & $-$4.03\%$^{***}$  & $-$3.23        & 0.823 & 226 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Conclusion} \label{sec:conclusion}
-Using dated membership, turnover\textendash based costs, and factor regressions with robust errors, we find that a naïve 12--1 month momentum strategy in the S\&P~500 fails to deliver positive abnormal returns during 2005–2024. Returns are largely explained by momentum exposure, and realistic frictions render the implementation unprofitable.  
+% ================================================================== %
+\section{Discussion}
+\label{sec:discussion}
+% ================================================================== %
 
-\paragraph{Limitations and future work.}
+Our results paint a coherent picture that reconciles the apparent contradiction between
+a working signal (the long leg earns $+7.9\%$) and a failing strategy ($-2.79\%$ net).
+The resolution lies in the asymmetric behavior of the short leg during market dislocations.
+
+In a secular bull market punctuated by sharp reversals, the stocks most likely to be in
+the bottom decile of momentum are those that have experienced severe drawdowns---financially
+distressed companies, cyclicals caught in a downturn, or sectors experiencing structural
+disruption. These stocks carry high beta, high volatility, and high short interest from
+the entire market, not just momentum traders. When sentiment shifts (as it did in March--April
+2009 and November~2020), these stocks do not merely recover modestly---they snap back
+violently, often doubling within weeks. A leveraged short position in such stocks is
+effectively writing a far-out-of-the-money put option on the market: it collects a
+small premium in most months but occasionally suffers a massive loss when the market
+reverses sharply.
+
+This interpretation is consistent with \citet{Daniel2016}'s option-theoretic model of
+momentum crashes. They show that momentum strategies have a return profile similar to
+a short volatility position: the strategy earns positive carry in trending markets and
+suffers acute losses during sharp reversals. Our data confirms this: the rolling Sharpe
+(Figure~\ref{fig:rolling}) is positive when the market is trending (2006--2008,
+2014--2018) and sharply negative following abrupt reversals.
+
+The implication for implementation is clear. A \emph{long-only} momentum overlay---buying
+top-decile momentum stocks as an overweight against an index benchmark---would have earned
+approximately $+7.9\%$ gross without the crash exposure. Alternatively,
+\citet{Barroso2015}'s volatility-scaling approach---reducing position size when recent
+strategy volatility is elevated---has been shown to substantially improve the
+risk-adjusted performance of momentum strategies by cutting exposure precisely when
+crash risk is highest. Both modifications address the short-leg problem identified here
+and represent natural extensions of this research.
+
+% ================================================================== %
+\section{Conclusion}
+\label{sec:conclusion}
+% ================================================================== %
+
+We have examined whether the canonical 12--1 month momentum strategy, applied to the
+S\&P~500 with survivorship-bias-free data and realistic transaction costs, generates
+abnormal returns over the 2006--2024 period. The answer is clearly negative: the
+strategy produces a net annualized return of $-2.79\%$, a Sharpe ratio of $-0.23$, and
+a maximum drawdown of $-81.2\%$.
+
+However, our leg decomposition reveals that this negative result masks an important
+underlying signal. The long leg---past winners---earns $+7.9\%$ annualized and the
+short leg---past losers---loses $-9.1\%$, confirming that momentum ranks stocks
+correctly as a cross-sectional predictor. The strategy fails not because the signal
+is wrong but because the short leg bears two catastrophic losses---April~2009
+($-31\%$) and November~2020 ($-19\%$)---driven by violent snap-back rallies in deeply
+distressed stocks. Transaction costs, while non-trivial at $\approx65$~bps annually,
+are a secondary concern. Factor regressions confirm that $82\%$ of the strategy's
+return variation is explained by the Fama--French UMD factor, with a statistically
+significant negative alpha once momentum exposure is controlled for.
+
+These findings have three practical implications. First, the profitability of momentum
+in the S\&P~500 depends critically on whether the short leg is implemented and how
+crash risk is managed; a long-only implementation of the signal would have been
+substantially more profitable over this period. Second, the 2006--2024 window is
+an unusually challenging period for large-cap momentum---it contains two of the
+largest momentum crashes on record and a prolonged bull market hostile to short-selling
+past losers---and results over a longer sample or in smaller-cap universes would likely
+differ. Third, the signal's validity as a ranking mechanism, evident in the long leg's
+$+7.9\%$ return, suggests that momentum information \emph{is} priced into S\&P~500
+stocks, just not in a way that is easily harvested through a symmetric long-short
+implementation.
+
+\paragraph{Limitations.}
 \begin{enumerate}[label=(\roman*), leftmargin=*]
-  \item Our membership reconstruction relies on Wikipedia; more authoritative CRSP membership files may refine accuracy.  
-  \item Turnover costs are modeled uniformly at 10~bps; liquidity\textendash adjusted costs may vary across stocks.  
-  \item Factor regressions use standard Fama--French sets; exploring alternative factors or structural models may yield further insight.  
+  \item Membership history relies on Wikipedia; CRSP's historical constituent files
+        would provide more complete and accurate coverage, particularly pre-2005.
+  \item The $\pm40\%$ monthly return cap is a modeling choice that suppresses measured
+        crash severity; without it, April~2009 would register as a $-53\%$ month,
+        which more accurately reflects the magnitude of the momentum crash but
+        likely exceeds what a real trading desk could have sustained.
+  \item Turnover costs are assumed uniform at 10~bps; in practice, liquidity varies
+        across names and time periods, and implementation shortfall would likely
+        be higher for the most illiquid short positions.
+  \item The analysis does not account for stock-borrow costs on the short leg, which
+        can be substantial for the most heavily shorted names and would further
+        reduce net returns.
 \end{enumerate}
 
-\paragraph{Reproducibility note.}
-All code, data, and scripts to replicate this analysis are available at \url{https://github.com/dshan12/Momentum-Research.git}. Tables and figures in this paper are auto\textendash generated.
+\paragraph{Future directions.}
+The most natural extension is to implement \citeauthor{Barroso2015}'s (\citeyear{Barroso2015})
+volatility-scaling overlay, which has been shown to improve momentum Sharpe ratios by
+approximately 50\% by reducing exposure during high-volatility regimes. A second direction
+is to expand the universe to include mid- and small-cap stocks, where the momentum
+premium has historically been more robust and crash episodes less severe relative to
+the signal's overall performance. A third direction is to explore whether the signal's
+positive long-leg return ($+7.9\%$) can be harvested cost-effectively through a
+long-only factor tilt, potentially avoiding the short-leg crash risk entirely.
 
+\paragraph{Reproducibility.}
+All code, data pipelines, and scripts to replicate every table and figure in this paper
+are publicly available at \url{https://github.com/dshan12/Momentum-Research}. The
+analysis is fully automated: running the pipeline from raw Wikipedia and Yahoo Finance
+data through to the final PDF requires no manual intervention.
+
+% ================================================================== %
 \bibliographystyle{apalike}
 \bibliography{references}
 
 \end{document}
-

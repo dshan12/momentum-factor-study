@@ -1,28 +1,101 @@
 \begin{thebibliography}{}
 
-\bibitem[Asness et~al., 2019]{Asness2019}
-Asness, C.~S., Frazzini, A., and Pedersen, L.~H. (2019).
-\newblock Quality minus junk.
-\newblock {\em Review of Accounting Studies}, 24(1):34--112.
+\bibitem[Asness, 2019]{Asness2019}
+Asness, C.~S. (2019).
+\newblock The {Illusory} decay of momentum's power.
+\newblock {\em Journal of Portfolio Management}, 45(4):50--65.
+
+\bibitem[Asness et~al., 2013]{Asness2013}
+Asness, C.~S., Moskowitz, T.~J., and Pedersen, L.~H. (2013).
+\newblock Value and momentum everywhere.
+\newblock {\em Journal of Finance}, 68(3):929--985.
+
+\bibitem[Barberis et~al., 1998]{Barberis1998}
+Barberis, N., Shleifer, A., and Vishny, R. (1998).
+\newblock A model of investor sentiment.
+\newblock {\em Journal of Financial Economics}, 49(3):307--343.
+
+\bibitem[Barroso and Santa-Clara, 2015]{Barroso2015}
+Barroso, P. and Santa-Clara, P. (2015).
+\newblock Momentum has its moments.
+\newblock {\em Journal of Financial Economics}, 116(1):111--120.
 
 \bibitem[Carhart, 1997]{carhart1997persistence}
 Carhart, M.~M. (1997).
 \newblock On persistence in mutual fund performance.
-\newblock {\em The Journal of Finance}, 52(1):57--82.
+\newblock {\em Journal of Finance}, 52(1):57--82.
 
 \bibitem[Daniel and Moskowitz, 2016]{Daniel2016}
-Daniel, K.~D. and Moskowitz, T.~J. (2016).
+Daniel, K. and Moskowitz, T.~J. (2016).
 \newblock Momentum crashes.
 \newblock {\em Journal of Financial Economics}, 122(2):221--247.
+
+\bibitem[Fama and French, 1996]{Fama1996}
+Fama, E.~F. and French, K.~R. (1996).
+\newblock Multifactor explanations of asset pricing anomalies.
+\newblock {\em Journal of Finance}, 51(1):55--84.
+
+\bibitem[Fama and French, 2015]{FamaFrench2015}
+Fama, E.~F. and French, K.~R. (2015).
+\newblock A five-factor asset pricing model.
+\newblock {\em Journal of Financial Economics}, 116(1):1--22.
+
+\bibitem[Frazzini et~al., 2015]{Frazzini2015}
+Frazzini, A., Israel, R., and Moskowitz, T.~J. (2015).
+\newblock Trading costs of asset pricing anomalies.
+\newblock {\em SSRN Working Paper}.
+\newblock Available at SSRN: \url{https://ssrn.com/abstract=2294498}.
+
+\bibitem[Geczy and Samonov, 2013]{Geczy2013}
+Geczy, C. and Samonov, M. (2013).
+\newblock 212 years of price momentum (the world's longest backtest: 1801--2012).
+\newblock {\em SSRN Working Paper}.
+\newblock Available at SSRN: \url{https://ssrn.com/abstract=2292544}.
+
+\bibitem[Gulen et~al., 2021]{Gulen2021}
+Gulen, H., Hwang, B.-H., and Verardo, M. (2021).
+\newblock Crowded trades and factor pricing.
+\newblock {\em SSRN Working Paper}.
+\newblock Available at SSRN: \url{https://ssrn.com/abstract=3841083}.
+
+\bibitem[Hong and Stein, 1999]{Hong1999}
+Hong, H. and Stein, J.~C. (1999).
+\newblock A unified theory of underreaction, momentum trading, and overreaction in asset markets.
+\newblock {\em Journal of Finance}, 54(6):2143--2184.
+
+\bibitem[Jegadeesh, 1990]{Jegadeesh1990}
+Jegadeesh, N. (1990).
+\newblock Evidence of predictable behavior of security returns.
+\newblock {\em Journal of Finance}, 45(3):881--898.
 
 \bibitem[Jegadeesh and Titman, 1993]{Jegadeesh1993}
 Jegadeesh, N. and Titman, S. (1993).
 \newblock Returns to buying winners and selling losers: Implications for stock market efficiency.
 \newblock {\em Journal of Finance}, 48(1):65--91.
 
+\bibitem[Johnson, 2002]{Johnson2002}
+Johnson, T.~C. (2002).
+\newblock Rational momentum effects.
+\newblock {\em Journal of Finance}, 57(2):585--608.
+
+\bibitem[Lesmond et~al., 2004]{Lesmond2004}
+Lesmond, D.~A., Schill, M.~J., and Zhou, C. (2004).
+\newblock The illusory nature of momentum profits.
+\newblock {\em Journal of Financial Economics}, 71(2):349--380.
+
+\bibitem[Liu and Zhang, 2008]{Liu2002}
+Liu, L.~X. and Zhang, L. (2008).
+\newblock Momentum profits, factor pricing, and macroeconomic risk.
+\newblock {\em Review of Financial Studies}, 21(6):2417--2448.
+
 \bibitem[Novy-Marx and Velikov, 2016]{NovyMarx2016}
 Novy-Marx, R. and Velikov, M. (2016).
 \newblock A taxonomy of anomalies and their trading costs.
 \newblock {\em Review of Financial Studies}, 29(1):104--147.
+
+\bibitem[Rouwenhorst, 1998]{Rouwenhorst1998}
+Rouwenhorst, K.~G. (1998).
+\newblock International momentum strategies.
+\newblock {\em Journal of Finance}, 53(1):267--284.
 
 \end{thebibliography}

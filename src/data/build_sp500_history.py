@@ -10,9 +10,6 @@ import pandas as pd
 import requests
 
 WIKI_CURRENT_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-WIKI_CHANGES_URL = (
-    "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies#Changes_in_2020s"
-)
 
 YF_TICKER_FIX = {
     "BRK.B": "BRK-B",
@@ -23,7 +20,7 @@ YF_TICKER_FIX = {
 def fetch_html(url: str) -> str:
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit /537.36"
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36"
         )
     }
@@ -35,12 +32,11 @@ def fetch_html(url: str) -> str:
 def normalize_ticker(t: str) -> str:
     if pd.isna(t):
         return None
-    t = t.strip().upper()
-    t = t.replace(" ", "")
+    t = str(t).strip().upper().replace(" ", "")
     if t in YF_TICKER_FIX:
         return YF_TICKER_FIX[t]
     t = re.sub(r"\.(?=[A-Z0-9]+$)", "-", t)
-    return t
+    return t if t else None
 
 
 def parse_date(s: str) -> pd.Timestamp:
@@ -69,205 +65,184 @@ def _extract_current_constituents() -> pd.DataFrame:
     candidates = [
         df
         for df in df_list
-        if any(
-            c.lower() in ["symbol", "ticker"]
-            for c in [str(col).lower() for col in df.columns]
-        )
+        if any(str(col).strip().lower() in ["symbol", "ticker"] for col in df.columns)
     ]
     if not candidates:
-        raise RuntimeError("Failed to extract current constituents")
+        raise RuntimeError("Failed to extract current constituents from Wikipedia.")
     cur = candidates[0].copy()
-    colmap = {c: c for c in cur.columns}
+
+    # Rename columns to standard names
+    colmap = {}
     for c in cur.columns:
-        if str(c).strip().lower() in ["symbol", "ticker", "code"]:
+        lc = str(c).strip().lower()
+        if lc in ["symbol", "ticker", "code"]:
             colmap[c] = "Symbol"
-        if str(c).strip().lower() in ["security", "company", "name"]:
+        elif lc in ["security", "company", "name"]:
             colmap[c] = "Security"
-        if "gics" in str(c).lower() and "sector" in str(c).lower():
+        elif "gics" in lc and "sector" in lc:
             colmap[c] = "GICS Sector"
     cur = cur.rename(columns=colmap)
     cur["Symbol"] = cur["Symbol"].apply(normalize_ticker)
     cur = cur.dropna(subset=["Symbol"]).drop_duplicates(subset=["Symbol"])
-    return cur[
-        ["Symbol", "Security"]
-        + [c for c in cur.columns if c not in ["Symbol", "Security"]]
-    ]
+    return cur
 
 
 def _extract_changes_table() -> pd.DataFrame:
+    """
+    Parse the Wikipedia S&P 500 changes table.
+    The table has multi-level headers like:
+        Date | Added (Ticker / Security) | Removed (Ticker / Security) | Reason
+    We flatten and extract ticker columns directly — they are plain ticker strings,
+    NOT wrapped in parentheses. The old regex was wrong and dropped most events.
+    """
     html = fetch_html(WIKI_CURRENT_URL)
-    all_tables = pd.read_html(StringIO(html), flavor="bs4")
+    all_tables = pd.read_html(StringIO(html), flavor="bs4", header=[0, 1])
 
-    cand = []
-    for df in all_tables:
-        cols_lower = [str(c).strip().lower() for c in df.columns]
-        has_date = any("date" in c for c in cols_lower)
-        has_changeish = any(
-            any(
-                k in c
-                for k in [
-                    "added",
-                    "removed",
-                    "company",
-                    "ticker",
-                    "reason",
-                    "change",
-                    "action",
-                    "notes",
-                ]
-            )
-            for c in cols_lower
+    changes_df = None
+    for t in all_tables:
+        # Flatten MultiIndex columns
+        if isinstance(t.columns, pd.MultiIndex):
+            flat = [
+                " ".join(str(x).strip() for x in col if "Unnamed" not in str(x)).strip()
+                for col in t.columns
+            ]
+        else:
+            flat = [str(c).strip() for c in t.columns]
+
+        col_lower = [c.lower() for c in flat]
+        has_date = any("date" in c for c in col_lower)
+        has_added = any("added" in c for c in col_lower)
+        has_removed = any("removed" in c for c in col_lower)
+
+        if has_date and has_added and has_removed:
+            t.columns = flat
+            changes_df = t
+            break
+
+    if changes_df is None:
+        raise RuntimeError(
+            "Could not find S&P 500 changes table on Wikipedia. "
+            "Column names may have changed — inspect the page manually."
         )
-        if has_date and has_changeish:
-            cand.append(df)
 
-    if not cand:
-        raise RuntimeError("Failed to extract changes table")
+    # Identify the relevant columns by fuzzy name matching
+    col_map = {}
+    for c in changes_df.columns:
+        lc = c.lower()
+        if "date" in lc and "date" not in col_map:
+            col_map["Date"] = c
+        elif "added" in lc and "ticker" in lc and "Added_Ticker" not in col_map:
+            col_map["Added_Ticker"] = c
+        elif "added" in lc and "security" in lc and "Added_Security" not in col_map:
+            col_map["Added_Security"] = c
+        elif "removed" in lc and "ticker" in lc and "Removed_Ticker" not in col_map:
+            col_map["Removed_Ticker"] = c
+        elif "removed" in lc and "security" in lc and "Removed_Security" not in col_map:
+            col_map["Removed_Security"] = c
+        elif "reason" in lc and "Reason" not in col_map:
+            col_map["Reason"] = c
 
-    frames = []
-    for t in cand:
-        df = t.copy()
-        df.columns = [str(c).strip() for c in df.columns]
+    required = ["Date", "Added_Ticker", "Removed_Ticker"]
+    missing = [k for k in required if k not in col_map]
+    if missing:
+        raise RuntimeError(
+            f"Changes table missing expected columns: {missing}. "
+            f"Found columns: {list(changes_df.columns)}"
+        )
 
-        std = {}
-        taken = set()
-        for c in list(df.columns):
-            lc = str(c).lower()
-            target = None
-            if "date" in lc:
-                target = "Date"
-            elif "added" in lc:
-                target = "Added"
-            elif "removed" in lc:
-                target = "Removed"
-            elif "reason" in lc or "notes" in lc or "change" in lc or "action" in lc:
-                target = "Reason"
-            elif "symbol" in lc or "ticker" in lc:
-                target = "Ticker"
-            elif "company" in lc:
-                target = "Company"
-            if target and target not in taken:
-                std[c] = target
-                taken.add(target)
+    result = pd.DataFrame()
+    result["Date"] = changes_df[col_map["Date"]].apply(parse_date)
+    # FIX: tickers are plain strings in these columns, no parentheses needed
+    result["Added"] = changes_df[col_map["Added_Ticker"]].apply(
+        lambda x: normalize_ticker(str(x).split("\n")[0].strip())
+        if pd.notna(x)
+        else None
+    )
+    result["Removed"] = changes_df[col_map["Removed_Ticker"]].apply(
+        lambda x: normalize_ticker(str(x).split("\n")[0].strip())
+        if pd.notna(x)
+        else None
+    )
+    if "Reason" in col_map:
+        result["Reason"] = changes_df[col_map["Reason"]]
 
-        if std:
-            df = df.rename(columns=std)
+    result = result.dropna(subset=["Date"])
+    result = result[result["Date"] >= pd.Timestamp("1990-01-01")]
+    return result.sort_values("Date").reset_index(drop=True)
 
-        # ensure unique column labels (drops later duplicates keeping first)
-        df = df.loc[:, ~df.columns.duplicated()]
-        keep = [
-            c
-            for c in ["Date", "Added", "Removed", "Reason", "Ticker", "Company"]
-            if c in df.columns
-        ]
-        if not keep or "Date" not in keep:
+
+def _make_events(changes: pd.DataFrame) -> T.List[ChangeEvent]:
+    events = []
+    for _, row in changes.iterrows():
+        added = [row["Added"]] if pd.notna(row.get("Added")) and row["Added"] else []
+        removed = (
+            [row["Removed"]] if pd.notna(row.get("Removed")) and row["Removed"] else []
+        )
+        if not added and not removed:
             continue
-
-        # ensure Date is parsed
-        df = df[keep].copy()
-        if "Date" in df:
-            df["Date"] = df["Date"].apply(parse_date)
-            df = df.dropna(subset=["Date"])
-
-        if not df.empty:
-            frames.append(df)
-
-    if not frames:
-        raise RuntimeError("Failed to extract changes table")
-
-    changes = (
-        pd.concat(frames, ignore_index=True).sort_values("Date").reset_index(drop=True)
-    )
-    return changes
-
-
-def _parse_added_removed(row: pd.Series) -> ChangeEvent:
-    added, removed = list(), list()
-    for col, bucket in [("Added", added), ("Removed", removed)]:
-        if col in row and pd.notna(row[col]):
-            s = str(row[col]).strip()
-            parts = re.split(r"[,/]| and ", s)
-            for p in parts:
-                p = p.strip()
-                if "Ticker" in row and pd.notna(row["Ticker"]):
-                    pass
-                if p:
-                    m = re.search(r"\(([A-Za-z0-9\.\-]+)\)", p)
-                    if m:
-                        bucket.append(normalize_ticker(m.group(1)))
-                    else:
-                        bucket.append(normalize_ticker(p))
-    if not added and not removed and "Reason" in row and pd.notna(row["Reason"]):
-        txt = str(row["Reason"])
-        m = re.search(
-            r"([A-Za-z0-9\.\-]+)\s+replac(?:e|es|ing)\s+([A-Za-z0-9\.\-]+)", txt, re.I
+        events.append(
+            ChangeEvent(
+                date=row["Date"],
+                added=added,
+                removed=removed,
+                raw=row.to_dict(),
+            )
         )
-        if m:
-            added = [normalize_ticker(m.group(1))]
-            removed = [normalize_ticker(m.group(2))]
-
-    added = [a for a in added if a]
-    removed = [r for r in removed if r]
-    return ChangeEvent(
-        date=row["Date"], added=added, removed=removed, raw=row.to_dict()
-    )
+    return events
 
 
 def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     """
-    Returns a dataframe of daily membership from 'start' to 'end'
+    Returns a dataframe of daily membership from 'start' to 'end'.
     Strategy:
-        1. Currnet set from current page
-        2. Changes_in_2020s All changes table since 1990
-        3. Roll back form 'today' to 'start' by reversing each change
-        4. Roll forward day-by-day applying changes
+        1. Get current set from Wikipedia current-constituents table.
+        2. Get all historical changes from the changes table.
+        3. Roll back from today to 'start' by reversing each change.
+        4. Roll forward day-by-day applying changes.
     """
     current = _extract_current_constituents()
     current_set = set(current["Symbol"].dropna().tolist())
-    changes = _extract_changes_table()
-    events: T.List[ChangeEvent] = []
-    for _, row in changes.iterrows():
-        ev = _parse_added_removed(row)
-        if pd.isna(ev.date):
-            continue
-        if not ev.added and not ev.removed:
-            continue
-        events.append(ev)
 
-    events = [e for e in events if e.date >= pd.Timestamp("1990-01-01")]
+    changes = _extract_changes_table()
+    events = _make_events(changes)
     events.sort(key=lambda e: e.date)
 
-    today = pd.Timestamp(dt.date.today())
+    print(f"[*] Parsed {len(events)} change events from Wikipedia.")
+
+    # Roll back from current to reconstruct membership at 'start'
     backward = [e for e in events if e.date > start]
-    backward.reverse()
+    backward_rev = sorted(backward, key=lambda e: e.date, reverse=True)
     memb = set(current_set)
-    for e in backward:
+    for e in backward_rev:
         for a in e.added:
-            if a in memb:
-                memb.remove(a)
+            memb.discard(a)
         for r in e.removed:
             if r:
                 memb.add(r)
 
+    print(f"[*] Reconstructed {len(memb)} members at start date {start.date()}.")
+
+    # Roll forward
     by_date: T.DefaultDict[pd.Timestamp, T.List[ChangeEvent]] = defaultdict(list)
     for e in events:
         if start <= e.date <= end:
             by_date[e.date.normalize()].append(e)
+
     days = pd.date_range(start=start.normalize(), end=end.normalize(), freq="D")
-    daily_rows = list()
+    daily_rows = []
     current_members = set(memb)
 
     for d in days:
         if d in by_date:
             for ev in by_date[d]:
                 for r in ev.removed:
-                    if r in current_members:
-                        current_members.remove(r)
+                    current_members.discard(r)
                 for a in ev.added:
                     if a:
                         current_members.add(a)
         for t in current_members:
             daily_rows.append((d, t, 1))
+
     daily = pd.DataFrame(daily_rows, columns=["date", "ticker", "in_index"])
     return daily
 
@@ -302,13 +277,17 @@ def main():
         .sort_values(["date", "ticker"])
         .reset_index(drop=True)
     )
-
     monthly["ticker"] = monthly["ticker"].apply(normalize_ticker)
 
-    out = args.out
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    monthly.to_csv(out, index=False)
-    print(f"[✓] Wrote {out} with {len(monthly):,} rows.")
+    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    monthly.to_csv(args.out, index=False)
+    print(f"[✓] Wrote {args.out} with {len(monthly):,} rows.")
+
+    # Quick sanity check
+    counts = monthly.groupby("date")["ticker"].count()
+    print(
+        f"[*] Avg members/month: {counts.mean():.0f} | Min: {counts.min()} | Max: {counts.max()}"
+    )
 
 
 if __name__ == "__main__":
