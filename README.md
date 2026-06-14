@@ -53,8 +53,6 @@ momentum-factor-study/
 ├── README.md               # Project documentation
 ├── pyproject.toml          # Project configuration
 ├── .gitignore              # Git ignore patterns
-├── .pre-commit-config.yaml # Code quality hooks
-├── .github/workflows/      # CI/CD workflows
 ├── data/
 │   └── cleaned/            # Pre-computed output data
 ├── figures/                # Generated plots
@@ -118,14 +116,11 @@ cd Momentum-Research
 # Install the package with core dependencies
 pip install -e .
 
-# Install with development dependencies (linting, testing, type-checking)
+# Install with development dependencies (testing)
 pip install -e ".[dev]"
 
-# Install with Jupyter notebook support
-pip install -e ".[jupyter]"
-
 # Or install everything
-pip install -e ".[dev,jupyter]"
+pip install -e ".[dev]"
 ```
 
 ### Reproducing the full pipeline
