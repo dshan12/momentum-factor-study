@@ -1,17 +1,24 @@
-import os
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+from statsmodels.regression.linear_model import RegressionResultsWrapper
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-DATA = os.path.join(ROOT, "data", "cleaned")
+logger = logging.getLogger(__name__)
 
-FACTORS_CSV = os.path.join(DATA, "ff5_umd_monthly.csv")
-GROSS_CSV = os.path.join(DATA, "strategy_gross_survivorship.csv")
-NET_CSV = os.path.join(DATA, "strategy_net_survivorship.csv")
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data" / "cleaned"
 
-OUT_CSV = os.path.join(DATA, "ff_regression_table.csv")
-OUT_TEX = os.path.join(DATA, "ff_regression_table.tex")
+FACTORS_CSV = DATA / "ff5_umd_monthly.csv"
+GROSS_CSV = DATA / "strategy_gross_survivorship.csv"
+NET_CSV = DATA / "strategy_net_survivorship.csv"
+
+OUT_CSV = DATA / "ff_regression_table.csv"
+OUT_TEX = DATA / "ff_regression_table.tex"
 
 MODELS = {
     "CAPM": ["Mkt-RF"],
@@ -22,16 +29,37 @@ MODELS = {
 HAC_LAGS = 6
 
 
-def load_series(path: str, name: str) -> pd.Series:
+def load_series(path: Path, name: str) -> pd.Series:
+    """Load a single-column CSV as a monthly-end Series.
+
+    Args:
+        path: Path to the CSV file.
+        name: Name to assign to the returned Series.
+
+    Returns:
+        A sorted monthly-end-frequency Series.
+    """
     s = pd.read_csv(path, parse_dates=[0], index_col=0).squeeze("columns")
     if isinstance(s, pd.DataFrame):
-        assert s.shape[1] == 1, f"Expected single-column series in {path}"
+        if s.shape[1] != 1:
+            raise ValueError(f"Expected single-column series in {path}")
         s = s.iloc[:, 0]
     s.name = name
     return s.sort_index().asfreq("ME")
 
 
-def load_factors(path: str) -> pd.DataFrame:
+def load_factors(path: Path) -> pd.DataFrame:
+    """Load Fama-French factors from CSV.
+
+    Args:
+        path: Path to the FF CSV file.
+
+    Returns:
+        DataFrame with factor columns indexed by date.
+
+    Raises:
+        ValueError: If required factor columns are missing.
+    """
     f = (
         pd.read_csv(path, parse_dates=["date"])
         .set_index("date")
@@ -47,7 +75,20 @@ def load_factors(path: str) -> pd.DataFrame:
 
 def regress_excess(
     ret: pd.Series, fac: pd.DataFrame, cols: list[str], lags: int = HAC_LAGS
-):
+) -> RegressionResultsWrapper:
+    """Regress excess returns on a set of factor portfolios.
+
+    Runs OLS with Newey-West (HAC) standard errors.
+
+    Args:
+        ret: Monthly return series (decimal).
+        fac: Factor DataFrame including 'RF' column.
+        cols: List of factor column names to include.
+        lags: Number of HAC lags (default HAC_LAGS).
+
+    Returns:
+        Fitted OLS regression results.
+    """
     y = (ret - fac["RF"]).dropna()
     X = fac.loc[y.index, cols].dropna()
     y = y.loc[X.index]
@@ -57,10 +98,26 @@ def regress_excess(
 
 
 def to_ann(m: float) -> float:
+    """Annualize a monthly return.
+
+    Args:
+        m: Monthly return as a decimal.
+
+    Returns:
+        Annualized return as a decimal.
+    """
     return (1.0 + m) ** 12 - 1.0
 
 
-def stars(p):
+def stars(p: float) -> str:
+    """Return significance stars for a p-value.
+
+    Args:
+        p: p-value from a statistical test.
+
+    Returns:
+        '***' if p < 0.01, '**' if p < 0.05, '*' if p < 0.10, else ''.
+    """
     if p < 0.01:
         return "***"
     if p < 0.05:
@@ -70,7 +127,8 @@ def stars(p):
     return ""
 
 
-def main():
+def main() -> None:
+    """Run factor regressions for gross and net strategy returns."""
     fac = load_factors(FACTORS_CSV)
     gross = load_series(GROSS_CSV, "gross")
     net = load_series(NET_CSV, "net")
@@ -79,9 +137,9 @@ def main():
     gross, net, fac = gross.loc[idx].dropna(), net.loc[idx].dropna(), fac.loc[idx]
 
     rows = []
-    print("=== Factor regressions with Newey–West (HAC) SEs ===")
+    logger.info("=== Factor regressions with Newey–West (HAC) SEs ===")
     for label, series in [("GROSS", gross), ("NET", net)]:
-        print(f"\n--- {label} ---")
+        logger.info("--- %s ---", label)
         for model_name, cols in MODELS.items():
             res = regress_excess(series, fac, cols, lags=HAC_LAGS)
             alpha_m = float(res.params["const"])
@@ -103,20 +161,25 @@ def main():
                 row[f"t_{c}"] = float(res.tvalues.get(c, np.nan))
             rows.append(row)
 
-            print(
-                f"{model_name:7s}  α(ann)={alpha_ann: .2%}  t={alpha_t: .2f}{stars(alpha_p):>3}  "
-                f"R²={res.rsquared: .3f}  n={int(res.nobs)}"
+            logger.info(
+                "%7s  \u03b1(ann)=% .2f%%  t=% .2f%s  R\u00b2=% .3f  n=%d",
+                model_name,
+                alpha_ann * 100,
+                alpha_t,
+                stars(alpha_p),
+                res.rsquared,
+                int(res.nobs),
             )
 
     out = pd.DataFrame(rows)
-    os.makedirs(DATA, exist_ok=True)
+    DATA.mkdir(parents=True, exist_ok=True)
     out.to_csv(OUT_CSV, index=False)
-    print(f"\n[✓] Saved regression table: {OUT_CSV}")
+    logger.info("Saved regression table: %s", OUT_CSV)
 
-    def fmt_pct(x):
+    def fmt_pct(x: float) -> str:
         return "-" if pd.isna(x) else f"{x:.2%}"
 
-    def fmt_num(x):
+    def fmt_num(x: float) -> str:
         return "-" if pd.isna(x) else f"{x:.2f}"
 
     panel = out[out["Series"] == "NET"].copy()
@@ -130,7 +193,7 @@ def main():
     latex = [
         r"\begin{table}[!ht]",
         r"\centering",
-        r"\caption{Factor Regressions (NET returns; HAC " + str(HAC_LAGS) + r" lags)}",
+        r"\caption{Factor Regressions (NET returns; HAC %d lags)}" % HAC_LAGS,
         r"\label{tab:ff_regressions}",
         r"\begin{tabular}{lccc}",
         r"\toprule",
@@ -145,7 +208,7 @@ def main():
     latex += [r"\bottomrule", r"\end{tabular}", r"\end{table}", ""]
     with open(OUT_TEX, "w") as f:
         f.write("\n".join(latex))
-    print(f"[✓] Saved LaTeX table: {OUT_TEX}")
+    logger.info("Saved LaTeX table: %s", OUT_TEX)
 
 
 if __name__ == "__main__":

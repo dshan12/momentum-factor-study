@@ -1,28 +1,49 @@
-import os
+from __future__ import annotations
+
 import io
+import logging
+import os
 import re
 import zipfile
-import requests
+from typing import List, Optional
+
 import pandas as pd
-from io import StringIO
+import requests
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
-OUT_PATH = os.path.join(ROOT, "data", "cleaned", "ff5_umd_monthly.csv")
+logger = logging.getLogger(__name__)
 
-FF5_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip"
-UMD_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_CSV.zip"
+ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+OUT_PATH: str = os.path.join(ROOT, "data", "cleaned", "ff5_umd_monthly.csv")
 
-HEADERS = {
+FF5_URL: str = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip"
+UMD_URL: str = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_CSV.zip"
+
+HEADERS: dict[str, str] = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
 }
 
-YYYYMM_RE = re.compile(r"^\s*(\d{6})\b")
+YYYYMM_RE: re.Pattern[str] = re.compile(r"^\s*(\d{6})\b")
 
 
 def _read_csv_block_from_zip(
-    url: str, expected_header_hints: list[str]
+    url: str, expected_header_hints: List[str]
 ) -> pd.DataFrame:
+    """Download a zip file from Ken French's data library and parse the monthly CSV block.
+
+    The zip contains a CSV file with a descriptive header, followed by the monthly
+    data table.  This function locates the data by scanning for the first YYYYMM row.
+
+    Args:
+        url: URL of the zip file.
+        expected_header_hints: Column-name substrings used to locate the header row.
+
+    Returns:
+        DataFrame with a 'date' column (month-end) and factor columns.
+
+    Raises:
+        RuntimeError: If the monthly table start cannot be found.
+    """
     r = requests.get(url, headers=HEADERS, timeout=60)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -36,10 +57,10 @@ def _read_csv_block_from_zip(
 
     try:
         start = next(i for i, ln in enumerate(lines) if YYYYMM_RE.match(ln))
-    except StopIteration:
-        raise RuntimeError("Could not find start of monthly table (YYYYMM).")
+    except StopIteration as e:
+        raise RuntimeError("Could not find start of monthly table (YYYYMM).") from e
 
-    header_idx = None
+    header_idx: Optional[int] = None
     scan_above = range(max(0, start - 10), start)[::-1]
     for i in scan_above:
         ln_low = lines[i].lower()
@@ -63,18 +84,19 @@ def _read_csv_block_from_zip(
 
     block = "\n".join([",".join(headers)] + lines[start:end])
 
-    df = pd.read_csv(StringIO(block))
+    df = pd.read_csv(io.StringIO(block))
     first = df.columns[0]
     df = df.rename(columns={first: "yyyymm"})
     df["yyyymm"] = df["yyyymm"].astype(str).str.extract(r"(\d{6})", expand=False)
     df = df[df["yyyymm"].notna()].copy()
     df["date"] = pd.to_datetime(df["yyyymm"], format="%Y%m") + pd.offsets.MonthEnd(0)
-    df.drop(columns=["yyyymm"], inplace=True)
+    df = df.drop(columns=["yyyymm"])
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
 
-def main():
+def main() -> None:
+    """Download FF5 and momentum factors, merge, and save to CSV."""
     ff5 = _read_csv_block_from_zip(
         FF5_URL, expected_header_hints=["Mkt-RF", "SMB", "HML", "RMW", "CMA", "RF"]
     )
@@ -105,7 +127,7 @@ def main():
 
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     f.to_csv(OUT_PATH, index=False)
-    print(f"[✓] Saved {OUT_PATH} shape={f.shape}")
+    logger.info("Saved %s shape=%s", OUT_PATH, f.shape)
 
 
 if __name__ == "__main__":

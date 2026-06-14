@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as below."
+authors:
+  - family-names: Sathish Kumar
+    given-names: Darshan
+    email: darshansathishkumar@gmail.com
+title: "Momentum-Research: Survivorship-Bias-Free 12-1 Momentum in the S&P 500"
+version: 1.0.0
+doi: 10.5281/zenodo.16702629
+date-released: 2025
+license: MIT
+repository-code: "https://github.com/dshan12/Momentum-Research"
+keywords:
+  - momentum
+  - cross-sectional momentum
+  - survivorship bias
+  - S&P 500
+  - transaction costs
+  - momentum crashes
+  - Fama-French factors

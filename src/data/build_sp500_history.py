@@ -1,23 +1,38 @@
-import re
+from __future__ import annotations
+
+import logging
 import os
+import re
 import typing as T
-import datetime as dt
-from dataclasses import dataclass
 from collections import defaultdict
+from dataclasses import dataclass
 from io import StringIO
 
 import pandas as pd
 import requests
 
-WIKI_CURRENT_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+logger = logging.getLogger(__name__)
 
-YF_TICKER_FIX = {
+WIKI_CURRENT_URL: str = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+
+YF_TICKER_FIX: T.Dict[str, str] = {
     "BRK.B": "BRK-B",
     "BF.B": "BF-B",
 }
 
 
 def fetch_html(url: str) -> str:
+    """Fetch HTML content from a URL with a browser-like User-Agent header.
+
+    Args:
+        url: The URL to fetch.
+
+    Returns:
+        The response text content.
+
+    Raises:
+        requests.HTTPError: If the HTTP request fails.
+    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -29,7 +44,15 @@ def fetch_html(url: str) -> str:
     return r.text
 
 
-def normalize_ticker(t: str) -> str:
+def normalize_ticker(t: str) -> str | None:
+    """Normalize a ticker symbol to a standard format for yfinance.
+
+    Args:
+        t: Raw ticker string.
+
+    Returns:
+        Normalized ticker string, or None if the input is invalid.
+    """
     if pd.isna(t):
         return None
     t = str(t).strip().upper().replace(" ", "")
@@ -40,26 +63,45 @@ def normalize_ticker(t: str) -> str:
 
 
 def parse_date(s: str) -> pd.Timestamp:
+    """Parse a date string into a normalized pandas Timestamp.
+
+    Attempts direct parsing first, then falls back to month-end parsing.
+
+    Args:
+        s: Raw date string.
+
+    Returns:
+        Normalized Timestamp, or pd.NaT if parsing fails.
+    """
     s = str(s).strip()
     try:
         return pd.to_datetime(s, errors="raise").normalize()
-    except Exception:
+    except Exception as e:
+        logger.debug("parse_date direct parse failed: %s", e)
         try:
             d = pd.to_datetime(s, errors="raise")
             return (d + pd.offsets.MonthEnd(0)).normalize()
-        except Exception:
+        except Exception as e2:
+            logger.debug("parse_date fallback parse failed: %s", e2)
             return pd.NaT
 
 
 @dataclass
 class ChangeEvent:
+    """Represents a single S&P 500 index composition change event."""
+
     date: pd.Timestamp
     added: T.List[str]
     removed: T.List[str]
-    raw: dict
+    raw: dict[str, T.Any]
 
 
 def _extract_current_constituents() -> pd.DataFrame:
+    """Fetch and parse the current S&P 500 constituents table from Wikipedia.
+
+    Returns:
+        DataFrame with columns Symbol, Security, and GICS Sector.
+    """
     html = fetch_html(WIKI_CURRENT_URL)
     df_list = pd.read_html(StringIO(html), flavor="bs4")
     candidates = [
@@ -72,7 +114,7 @@ def _extract_current_constituents() -> pd.DataFrame:
     cur = candidates[0].copy()
 
     # Rename columns to standard names
-    colmap = {}
+    colmap: T.Dict[str, str] = {}
     for c in cur.columns:
         lc = str(c).strip().lower()
         if lc in ["symbol", "ticker", "code"]:
@@ -88,12 +130,18 @@ def _extract_current_constituents() -> pd.DataFrame:
 
 
 def _extract_changes_table() -> pd.DataFrame:
-    """
-    Parse the Wikipedia S&P 500 changes table.
+    """Parse the Wikipedia S&P 500 changes table.
+
     The table has multi-level headers like:
         Date | Added (Ticker / Security) | Removed (Ticker / Security) | Reason
     We flatten and extract ticker columns directly — they are plain ticker strings,
-    NOT wrapped in parentheses. The old regex was wrong and dropped most events.
+    NOT wrapped in parentheses.
+
+    Returns:
+        DataFrame with columns Date, Added, Removed, and optionally Reason.
+
+    Raises:
+        RuntimeError: If the changes table cannot be found or is missing columns.
     """
     html = fetch_html(WIKI_CURRENT_URL)
     all_tables = pd.read_html(StringIO(html), flavor="bs4", header=[0, 1])
@@ -126,7 +174,7 @@ def _extract_changes_table() -> pd.DataFrame:
         )
 
     # Identify the relevant columns by fuzzy name matching
-    col_map = {}
+    col_map: T.Dict[str, str] = {}
     for c in changes_df.columns:
         lc = c.lower()
         if "date" in lc and "date" not in col_map:
@@ -152,7 +200,6 @@ def _extract_changes_table() -> pd.DataFrame:
 
     result = pd.DataFrame()
     result["Date"] = changes_df[col_map["Date"]].apply(parse_date)
-    # FIX: tickers are plain strings in these columns, no parentheses needed
     result["Added"] = changes_df[col_map["Added_Ticker"]].apply(
         lambda x: normalize_ticker(str(x).split("\n")[0].strip())
         if pd.notna(x)
@@ -172,7 +219,15 @@ def _extract_changes_table() -> pd.DataFrame:
 
 
 def _make_events(changes: pd.DataFrame) -> T.List[ChangeEvent]:
-    events = []
+    """Convert the changes DataFrame into a list of ChangeEvent dataclass instances.
+
+    Args:
+        changes: DataFrame with columns Date, Added, Removed.
+
+    Returns:
+        List of ChangeEvent objects.
+    """
+    events: T.List[ChangeEvent] = []
     for _, row in changes.iterrows():
         added = [row["Added"]] if pd.notna(row.get("Added")) and row["Added"] else []
         removed = (
@@ -192,13 +247,20 @@ def _make_events(changes: pd.DataFrame) -> T.List[ChangeEvent]:
 
 
 def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    """
-    Returns a dataframe of daily membership from 'start' to 'end'.
+    """Build a daily S&P 500 membership timeline from start to end.
+
     Strategy:
         1. Get current set from Wikipedia current-constituents table.
         2. Get all historical changes from the changes table.
         3. Roll back from today to 'start' by reversing each change.
         4. Roll forward day-by-day applying changes.
+
+    Args:
+        start: Start date for the membership timeline.
+        end: End date for the membership timeline.
+
+    Returns:
+        DataFrame with columns date, ticker, in_index.
     """
     current = _extract_current_constituents()
     current_set = set(current["Symbol"].dropna().tolist())
@@ -207,7 +269,7 @@ def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.Data
     events = _make_events(changes)
     events.sort(key=lambda e: e.date)
 
-    print(f"[*] Parsed {len(events)} change events from Wikipedia.")
+    logger.info("Parsed %d change events from Wikipedia.", len(events))
 
     # Roll back from current to reconstruct membership at 'start'
     backward = [e for e in events if e.date > start]
@@ -220,7 +282,7 @@ def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.Data
             if r:
                 memb.add(r)
 
-    print(f"[*] Reconstructed {len(memb)} members at start date {start.date()}.")
+    logger.info("Reconstructed %d members at start date %s.", len(memb), start.date())
 
     # Roll forward
     by_date: T.DefaultDict[pd.Timestamp, T.List[ChangeEvent]] = defaultdict(list)
@@ -229,7 +291,7 @@ def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.Data
             by_date[e.date.normalize()].append(e)
 
     days = pd.date_range(start=start.normalize(), end=end.normalize(), freq="D")
-    daily_rows = []
+    daily_rows: T.List[T.Tuple[pd.Timestamp, str, int]] = []
     current_members = set(memb)
 
     for d in days:
@@ -248,6 +310,14 @@ def build_membership_timeline(start: pd.Timestamp, end: pd.Timestamp) -> pd.Data
 
 
 def monthly_panel_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate daily membership to monthly frequency.
+
+    Args:
+        daily: DataFrame with columns date, ticker, in_index at daily frequency.
+
+    Returns:
+        DataFrame with columns date (month-end), ticker, in_index.
+    """
     daily["month"] = pd.to_datetime(daily["date"]) + pd.offsets.MonthEnd(0)
     monthly = (
         daily.groupby(["month", "ticker"])["in_index"]
@@ -258,7 +328,8 @@ def monthly_panel_from_daily(daily: pd.DataFrame) -> pd.DataFrame:
     return monthly
 
 
-def main():
+def main() -> None:
+    """Parse arguments and build the S&P 500 monthly membership CSV."""
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -270,7 +341,7 @@ def main():
     start = pd.to_datetime(args.start)
     end = pd.to_datetime(args.end)
 
-    print("[*] Building survivorship-bias–free membership…")
+    logger.info("Building survivorship-bias–free membership…")
     daily = build_membership_timeline(start, end)
     monthly = (
         monthly_panel_from_daily(daily)
@@ -281,12 +352,15 @@ def main():
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     monthly.to_csv(args.out, index=False)
-    print(f"[✓] Wrote {args.out} with {len(monthly):,} rows.")
+    logger.info("Wrote %s with %d rows.", args.out, len(monthly))
 
     # Quick sanity check
     counts = monthly.groupby("date")["ticker"].count()
-    print(
-        f"[*] Avg members/month: {counts.mean():.0f} | Min: {counts.min()} | Max: {counts.max()}"
+    logger.info(
+        "Avg members/month: %.0f | Min: %d | Max: %d",
+        counts.mean(),
+        counts.min(),
+        counts.max(),
     )
 
 

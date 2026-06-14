@@ -4,13 +4,32 @@ __pycache__/
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
+
+# Caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
 
 # Virtual environments
 .venv
-.git
 .python-version
-uv.lock
 
-# Project-specific files
+# Environment files
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project-specific
 data/raw/
+
+# Git
+.git
+uv.lock

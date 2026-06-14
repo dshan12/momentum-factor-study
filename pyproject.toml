@@ -1,21 +1,95 @@
 [project]
-name = "quant-research"
-version = "0.1.0"
-description = "Add your description here"
+name = "momentum-research"
+version = "1.0.0"
+description = "Survivorship-bias–free replication study of the 12–1 month cross-sectional momentum strategy in the S&P 500 (2005–2024)"
 readme = "README.md"
+authors = [
+    { name = "Darshan Sathish Kumar", email = "dshan@umich.edu" },
+]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
 requires-python = ">=3.13"
 dependencies = [
-    "beautifulsoup4>=4.13.4",
-    "dataclasses>=0.8",
-    "html5lib>=1.1",
-    "ipykernel>=6.29.5",
-    "jupyter-client>=8.6.3",
-    "jupyterlab>=4.4.4",
-    "lxml>=6.0.0",
-    "matplotlib>=3.10.3",
-    "pandas>=2.3.1",
-    "requests>=2.32.4",
-    "seaborn>=0.13.2",
-    "statsmodels>=0.14.5",
+    "beautifulsoup4>=4.13",
+    "lxml>=6.0",
+    "matplotlib>=3.10",
+    "numpy>=2.3",
+    "pandas>=2.3",
+    "requests>=2.32",
+    "seaborn>=0.13",
+    "statsmodels>=0.14",
     "yfinance>=0.2.65",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.2",
+    "pytest>=8.3",
+    "pytest-cov>=6.1",
+    "ruff>=0.11",
+    "mypy>=1.15",
+]
+jupyter = [
+    "jupyterlab>=4.4",
+    "ipykernel>=6.30",
+]
+
+[project.urls]
+Homepage = "https://github.com/dshan/momentum-research"
+Source = "https://github.com/dshan/momentum-research"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "ANN",       # missing type annotation — too pedantic for research code
+    "D",         # docstring rules — not enforced
+    "COM812",    # trailing comma missing — conflicts with formatter
+    "ISC001",    # implicit string concatenation — conflicts with formatter
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=xml",
+]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_unimported = false
+ignore_missing_imports = true
+explicit_package_bases = true
+namespace_packages = true
+mypy_path = ["src"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
