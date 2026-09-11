@@ -59,12 +59,15 @@ purging is applied.
 
 ## 3. Baseline
 
-**Equal-risk market baseline:** the US market total return (`Mkt-RF +
-RF`) over the identical month-end index. It is reported side by side
-with the strategy on every split (annualized return, volatility, Sharpe
-at 2% risk-free, maximum drawdown). This is deliberately simple: no
-ranking, no turnover, no cost model. Any claim of a momentum premium
-must clear this hurdle on both absolute and risk-adjusted terms.
+**Market total-return baseline:** the US market total return (`Mkt-RF +
+RF`) over the identical month-end index, with no volatility scaling and
+no risk matching. It is reported side by side with the strategy on every
+split (annualized return, volatility, Sharpe at 2% risk-free, maximum
+drawdown). This is deliberately simple: no ranking, no turnover, no cost
+model. Any claim of a momentum premium must clear this hurdle on both
+absolute and risk-adjusted terms. The baseline is not volatility-matched
+to the strategy, so Sharpe comparisons account for the differing
+realized volatilities rather than assuming equal risk.
 
 ## 4. Leakage / look-ahead-bias audit
 
@@ -102,6 +105,19 @@ scales the premium by its realized volatility over each fixed window.
 - FF5+UMD attribution on the test window with Newey-West standard
   errors (`ff5_umd_alpha_test.csv`): annualized alpha, t-statistic,
   p-value, R-squared.
+- Raw-return sensitivity on the test window (`raw_sensitivity_test.csv`,
+  `raw_vs_stored_test.png`). The strategy weights are rebuilt from the
+  masked price panel under the locked 12-1 rule and applied to three
+  return panels: raw gap-aware returns (no cap, no winsorization),
+  capped-only (±40%), and final (cap + 1st/99th cross-sectional
+  winsorization). Result on the locked test at 10 bps: raw −2.06%
+  annualized (Sharpe −0.18, MaxDD −51.8%), capped-only −2.22% (Sharpe
+  −0.20), final −2.24% (Sharpe −0.21); HAC p-values 0.70 / 0.66 / 0.65.
+  Only 0.42% of stock-months breach the ±40% cap. The largest monthly
+  raw-vs-final delta is 7.0pp in March 2020; the worst test month
+  (November 2020) is −22.2% raw vs −19.8% final, so the transformations
+  damp the crash-month tails but leave the sign, significance, and
+  rejection conclusion unchanged.
 - Equity and drawdown plots with the out-of-sample boundary marked
   (`equity_by_split.png`, `drawdown.png`).
 
@@ -111,8 +127,9 @@ Reject H1 if, on the locked test window (2020–2024), **any** of the
 following holds: (a) mean net monthly return ≤ 0; (b) net Sharpe ≤ 0;
 (c) FF5+UMD annualized alpha ≤ 0 or statistically indistinguishable
 from zero at the 5% level (Newey-West). A premium that is positive only
-before costs, only in-sample, or only at unrealistically low turnover
-costs does not sustain H1.
+before costs, only in-sample, only without return transformations, or
+only at unrealistically low turnover costs does not sustain H1. The
+test period and this rule are unchanged by the sensitivity checks.
 
 For context, the full-sample reference result is a negative net premium
 (approximately −2.8% annualized, Sharpe −0.23, FF5+UMD alpha
@@ -136,7 +153,8 @@ python audit_leakage.py
 Expected runtime is under two minutes on a standard machine. Outputs in
 `outputs/`: `strategy_by_split.csv`, `baseline_market_by_split.csv`,
 `tc_sensitivity_test.csv`, `ff5_umd_alpha_test.csv`,
-`equity_by_split.png`, `drawdown.png`, `verification.log`,
+`raw_sensitivity_test.csv`, `equity_by_split.png`, `drawdown.png`,
+`raw_vs_stored_test.png`, `verification.log`,
 `leakage_checklist.csv`, `leakage_checklist.md`.
 
 Regenerating the frozen inputs from source (Wikipedia, Yahoo Finance,

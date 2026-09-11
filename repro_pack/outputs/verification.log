@@ -5,3 +5,5 @@ ff5_umd_monthly.csv sha256[:16]=d074a9fb4ce5beda
 test N(strategy)=60
 test AnnRet=-0.0224 Sharpe=-0.209 MaxDD=-0.4721
 FF5+UMD test alpha_ann=-0.0493 t=-1.58 p=0.1151 R2=0.789 n=60
+raw sensitivity (test, 10bps): stored AnnRet=-0.0224 Sharpe=-0.209; raw AnnRet=-0.0206 Sharpe=-0.178
+cap hit rate=0.00421 (406 stock-months); max|raw-final| monthly=0.0699 mean delta=0.00016
