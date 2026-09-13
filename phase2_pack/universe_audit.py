@@ -86,43 +86,56 @@ def main() -> None:
     stale = sorted(frozen_last - live)
     missed = sorted(live - frozen_last)
 
-    # 4. Stale separation via trailing price availability.
+    # 4. Stale separation via lifetime/trailing price availability.
+    # Rule (stated before use): a frozen-not-live name with zero lifetime
+    # prices never entered a rank or return, so its strategy impact is
+    # exactly zero (this pools rename-ghosts and download failures, which
+    # are indistinguishable offline and identical in effect). A name whose
+    # prices end before 2024 is a mid-window delisting (ghost). A name
+    # priced through window end was a legitimate member during the test
+    # window -- most plausibly a genuine 2025 removal, no uncertainty.
     union = pd.read_csv(data / "monthly_adjclose_union.csv", parse_dates=["date"])
     union = union.set_index("date").sort_index()
-    last_px: dict[str, str] = {}
-    for t in stale:
-        col = union[t] if t in union.columns else pd.Series(dtype=float)
-        valid = col.dropna()
-        last_px[t] = (
-            valid.index.max().strftime("%Y-%m-%d") if len(valid) else "no-prices"
-        )
-    stale_tbl = pd.DataFrame(
-        {
-            "ticker": stale,
-            "last_price_month": [last_px[t] for t in stale],
-            "classification": [
-                "rename/M&A ghost (delisted well before window end)"
-                if last_px[t] < "2024-01-01"
-                else "presumed 2025 removal (ambiguous)"
-                for t in stale
-            ],
-        }
+    n_empty_union = int(
+        sum(union[c].notna().sum() == 0 for c in union.columns)
     )
-    stale_tbl.to_csv(out / "stale_tickers.csv", index=False)
-    n_ghost = int((stale_tbl["classification"].str.startswith("rename")).sum())
-    n_ambig = int((stale_tbl["classification"].str.startswith("presumed")).sum())
-
-    # 5. Strategy-level impact: ghost weight in test-window 12-1 legs.
-    mp = pd.read_csv(
+    mp_raw = pd.read_csv(
         data / "masked_prices_survivorship.csv", parse_dates=["date"]
     ).set_index("date").sort_index()
+    tradable = mp_raw.loc[mp_raw.index >= "2005-01-01"].notna().sum(axis=1)
+    rows = []
+    for t in stale:
+        n = int(union[t].notna().sum()) if t in union.columns else 0
+        if n == 0:
+            last, cls = "no-prices", "non-participating (zero impact)"
+        else:
+            last = union[t].dropna().index.max()
+            last_s = last.strftime("%Y-%m-%d")
+            if last < pd.Timestamp("2024-01-01"):
+                last, cls = last_s, "mid-window delisting (ghost)"
+            else:
+                last, cls = last_s, "legitimate thru window (likely 2025 removal)"
+        rows.append({"ticker": t, "n_prices": n, "last_price_month": last,
+                     "classification": cls})
+    stale_tbl = pd.DataFrame(rows)
+    stale_tbl.to_csv(out / "stale_tickers.csv", index=False)
+    n_nonpart = int((stale_tbl["classification"].str.startswith("non-part")).sum())
+    n_ghost = int((stale_tbl["classification"].str.startswith("mid-window")).sum())
+    n_legit = int((stale_tbl["classification"].str.startswith("legitimate")).sum())
+
+    # 5. Strategy-level impact: stale weight in test-window 12-1 legs.
+    # Non-participating names cannot appear (no prices -> no ranks);
+    # mid-window ghosts could appear historically -- check test window.
+    mp = mp_raw
     L = np.log(mp.where(mp > 0))
     mom = (L.shift(1) - L.shift(13)).replace([np.inf, -np.inf], np.nan)
     ranks = mom.rank(axis=1, pct=True, na_option="keep")
     longs = (ranks >= 0.9).astype(int)
     shorts = (ranks <= 0.1).astype(int)
     valid = (longs.sum(axis=1) >= 20) & (shorts.sum(axis=1) >= 20)
-    ghost_set = set(stale_tbl[stale_tbl["classification"].str.startswith("rename")]["ticker"])
+    ghost_set = set(
+        stale_tbl[~stale_tbl["classification"].str.startswith("legitimate")]["ticker"]
+    )
     leg_cols = set(mp.columns)
     ghost_in_universe = ghost_set & leg_cols
     test_idx = longs.index[longs.index >= TEST_START]
@@ -157,8 +170,14 @@ def main() -> None:
         from data import build_sp500_history as bsh  # noqa
 
         rebuild_import = "importable"
+        try:
+            bsh._extract_changes_table()
+            changes_parse = "parse OK"
+        except Exception as e:
+            changes_parse = f"parse FAILED: {type(e).__name__}: {e}"
     except Exception as e:
         rebuild_import = f"import failed: {e}"
+        changes_parse = "not probed"
 
     summary = pd.DataFrame(
         [
@@ -184,8 +203,14 @@ def main() -> None:
             },
             {"metric": f"anchor ({anchor_note})", "value": f"{len(live)}"},
             {"metric": "frozen-not-live (stale-or-2025-removed)", "value": f"{len(stale)}"},
-            {"metric": "confirmed rename/M&A ghosts", "value": f"{n_ghost}"},
-            {"metric": "ambiguous (presumed 2025 removals)", "value": f"{n_ambig}"},
+            {"metric": "non-participating (zero lifetime prices)", "value": f"{n_nonpart}"},
+            {"metric": "mid-window delistings (ghosts)", "value": f"{n_ghost}"},
+            {"metric": "legitimate thru window (likely 2025 removals)", "value": f"{n_legit}"},
+            {"metric": "union tickers fully empty", "value": f"{n_empty_union}"},
+            {
+                "metric": "tradable members/month (mean/min)",
+                "value": f"{tradable.mean():.0f}/{tradable.min()}",
+            },
             {"metric": "live-not-frozen", "value": f"{len(missed)}"},
             {
                 "metric": "test months with ghost in leg",
@@ -200,17 +225,21 @@ def main() -> None:
                 "value": f"{ghost_test_months}/{len(ghost_in_universe)}",
             },
             {"metric": "rebuild module status", "value": rebuild_import},
+            {"metric": "changes-table re-parse today", "value": changes_parse},
         ]
     )
     summary.to_csv(out / "universe_audit.csv", index=False)
     with open(out / "universe_audit.md", "w") as f:
         f.write("# Point-in-Time Universe Audit\n\n")
-        f.write(summary.to_markdown(index=False))
+        f.write("| metric | value |\n|---|---|\n")
+        for _, row in summary.iterrows():
+            f.write(f"| {row['metric']} | {row['value']} |\n")
         f.write(
             "\n\nConfound: the anchor postdates the frozen window by ~20 months; "
-            "frozen-not-live names split into confirmed ghosts (trailing "
-            "prices end before 2024) and presumed 2025 removals (ambiguous). "
-            "See stale_tickers.csv.\n"
+            "frozen-not-live names split into non-participating (zero prices, "
+            "zero impact by construction), mid-window delistings, and "
+            "legitimate members priced through window end (no test-window "
+            "uncertainty). See stale_tickers.csv.\n"
         )
 
     print(summary.to_string(index=False))
